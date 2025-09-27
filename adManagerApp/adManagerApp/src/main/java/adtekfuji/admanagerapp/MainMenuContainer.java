@@ -11,7 +11,6 @@ import adtekfuji.locale.LocaleUtils;
 import adtekfuji.plugin.PluginLoader;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -20,21 +19,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.stream.Collectors;
-import javafx.event.ActionEvent;
-import javafx.scene.control.Button;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.input.MouseEvent;
-import javafx.scene.layout.Pane;
 import jp.adtekfuji.adFactory.entity.login.LoginUserInfoEntity;
 import jp.adtekfuji.adFactory.entity.system.SystemOptionEntity;
 import jp.adtekfuji.adFactory.enumerate.LicenseOptionType;
-import jp.adtekfuji.adFactory.enumerate.MainMenuCategory;
+import jp.adtekfuji.adFactory.enumerate.MainMenuCategoryEnum;
 import jp.adtekfuji.adFactory.enumerate.MenuTypeEnum;
 import jp.adtekfuji.adFactory.enumerate.RoleAuthorityType;
 import jp.adtekfuji.adFactory.enumerate.RoleAuthorityTypeEnum;
+import jp.adtekfuji.adFactory.enumerate.SubMenuCategoryEnum;
 import jp.adtekfuji.adFactory.plugin.AdManagerAppMainMenuInterface;
+import jp.adtekfuji.adFactory.plugin.AdManagerAppMainMenuInterface.MenuNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -179,10 +176,16 @@ public class MainMenuContainer {
             TreeItem<String> root = new TreeItem<>("root");
             root.setExpanded(true);
 
-//            TreeItem<String> parent = new TreeItem<>("parent");
-//            root.getChildren().add(parent);
-
             Map<TreeItem<String>, Runnable> map = new HashMap<>();
+            Map<MainMenuCategoryEnum, TreeItem<String>> categoryNodes = new EnumMap<>(MainMenuCategoryEnum.class);
+            
+            if(menuType.isTree()) {
+                
+                for (MainMenuCategoryEnum category : MainMenuCategoryEnum.visibleCategories()) {
+                    TreeItem<String> categoryNode = new TreeItem<>(category.getDisplayName());
+                    categoryNodes.put(category, categoryNode);
+                }
+            }
 
             for (AdManagerAppMainMenuInterface plugin : plugins) {
                 // 権限チェック
@@ -237,18 +240,52 @@ public class MainMenuContainer {
 
                 if (isAllow) {
                     plugin.setProperties(properties);
-                    TreeItem<String> item = new TreeItem<>(plugin.getDisplayName());
-                    root.getChildren().add(item);
-                    map.put(item, plugin::onSelectMenuAction);
+                    if (menuType.isTree()) {
+                        Map<MainMenuCategoryEnum, List<MenuNode>> nodeMap = plugin.getTreeNodes();
+                        if (nodeMap != null && !nodeMap.isEmpty()) {
+                            for (Map.Entry<MainMenuCategoryEnum, List<MenuNode>> entry : nodeMap.entrySet()) {
+                                MainMenuCategoryEnum category = entry.getKey();
+                                List<MenuNode> nodes = entry.getValue();
+                                if (nodes != null && !nodes.isEmpty() && categoryNodes.containsKey(category)) {
+                                    for (MenuNode menuNode : nodes) {
+                                        TreeItem<String> node = menuNode.getTreeItem();
+                                        categoryNodes.get(category).getChildren().add(node);
+                                        map.put(node, menuNode.getAction());
+                                        // Map child actions
+                                        for (Map.Entry<TreeItem<String>, Runnable> childAction : menuNode.getChildActions().entrySet()) {
+                                            map.put(childAction.getKey(), childAction.getValue());
+                                        }
+                                        // Only propagate non-null actions to avoid overwriting child actions
+                                        if (menuNode.getAction() != null) {
+                                            addActionsRecursively(node, menuNode.getAction(), map);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        TreeItem<String> item = new TreeItem<>(plugin.getDisplayName());
+                        root.getChildren().add(item);
+                        map.put(item, plugin::onSelectMenuAction);
+                    }
+                    
                 } else {
                     logger.warn("plugin:{} is not allow.", plugin.getClass().getName());
+                }
+            }
+            
+            if (menuType.isTree()) {
+                for (TreeItem<String> categoryNode : categoryNodes.values()) {
+                    if (!categoryNode.getChildren().isEmpty()) {
+                        root.getChildren().add(categoryNode);
+                    }
                 }
             }
 
             // Add special entries: Object Edit (conditional) and Log Out
             boolean isTraceabilityEnabled = false;
             Optional<SystemOptionEntity> traceOpt = optionLicenses.stream().filter((o) -> "@Traceability".equals(o.getOptionName())).findFirst();
-            if (traceOpt.isPresent() && Boolean.TRUE.equals(traceOpt.get().getEnable())) {
+            if (traceOpt.isPresent() && Boolean.TRUE.equals(traceOpt.get().getEnable() && !menuType.isTree())) {
                 TreeItem<String> objEdit = new TreeItem<>(LocaleUtils.getString("key.ObjectEdit"));
                 root.getChildren().add(objEdit);
                 map.put(objEdit, () -> {
@@ -261,7 +298,22 @@ public class MainMenuContainer {
                     sc.setComponent("AppBarPane", "AppBarCompo");
                     sc.setComponent("ContentNaviPane", "ObjectEditCompo");
                 });
+            } else {
+                TreeItem<String> objectEditItem = new TreeItem<>(SubMenuCategoryEnum.OBJECT.getDisplayName());
+                Runnable objectEditAction = () -> {
+                    SceneContiner sc = SceneContiner.getInstance();
+                    if (!sc.trans("ObjectEditScene")) {
+                        return;
+                    }
+                    sc.visibleArea("MenuPane", false);
+                    sc.visibleArea("MenuPaneUnderlay", false);
+                    sc.setComponent("AppBarPane", "AppBarCompo");
+                    sc.setComponent("ContentNaviPane", "ObjectEditCompo");
+                };
+                categoryNodes.get(MainMenuCategoryEnum.SETTINGS).getChildren().add(objectEditItem);
+                map.put(objectEditItem, objectEditAction);
             }
+            
             TreeItem<String> logout = new TreeItem<>(LocaleUtils.getString("key.LogOut"));
             root.getChildren().add(logout);
             map.put(logout, () -> {
@@ -281,6 +333,14 @@ public class MainMenuContainer {
             });
         } finally {
             logger.info("makeMenuTree end.");
+        }
+    }
+    
+     // Helper method to recursively add actions for all child nodes
+    private void addActionsRecursively(TreeItem<String> node, Runnable action, Map<TreeItem<String>, Runnable> actionMap) {
+        for (TreeItem<String> child : node.getChildren()) {
+            actionMap.put(child, action);
+            addActionsRecursively(child, action, actionMap);
         }
     }
 }
