@@ -5,9 +5,13 @@
  */
 package jp.adtekfuji.adFactory.plugin;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import javafx.scene.control.TreeItem;
 import jp.adtekfuji.adFactory.enumerate.LicenseOptionType;
+import jp.adtekfuji.adFactory.enumerate.MainMenuCategoryEnum;
 import jp.adtekfuji.adFactory.enumerate.RoleAuthorityType;
 
 /**
@@ -129,4 +133,36 @@ public interface AdManagerAppMainMenuInterface {
      * @param properties
      */
     public void setProperties(Properties properties);
+    
+    class MenuNode {
+            private final TreeItem<String> treeItem;
+            private final Runnable action;
+            private final Map<TreeItem<String>, Runnable> childActions;
+
+            public MenuNode(TreeItem<String> treeItem, Runnable action) {
+                this(treeItem, action, Collections.emptyMap());
+            }
+
+            public MenuNode(TreeItem<String> treeItem, Runnable action, Map<TreeItem<String>, Runnable> childActions) {
+                this.treeItem = treeItem;
+                this.action = action;
+                this.childActions = childActions != null ? childActions : Collections.emptyMap();
+            }
+
+            public TreeItem<String> getTreeItem() {
+                return treeItem;
+            }
+
+            public Runnable getAction() {
+                return action;
+            }
+
+            public Map<TreeItem<String>, Runnable> getChildActions() {
+                return childActions;
+            }
+        }
+
+    default Map<MainMenuCategoryEnum, List<MenuNode>> getTreeNodes() {
+        return Collections.emptyMap();
+    }
 }
