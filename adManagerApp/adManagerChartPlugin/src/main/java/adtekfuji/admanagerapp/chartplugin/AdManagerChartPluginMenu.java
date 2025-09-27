@@ -14,12 +14,14 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.ResourceBundle;
+import javafx.scene.control.TreeItem;
 import jp.adtekfuji.adFactory.enumerate.LicenseOptionType;
-import jp.adtekfuji.adFactory.enumerate.MainMenuCategory;
+import jp.adtekfuji.adFactory.enumerate.MainMenuCategoryEnum;
 import jp.adtekfuji.adFactory.enumerate.MenuTypeEnum;
 import jp.adtekfuji.adFactory.enumerate.RoleAuthorityType;
 import jp.adtekfuji.adFactory.enumerate.RoleAuthorityTypeEnum;
@@ -34,10 +36,6 @@ import jp.adtekfuji.adFactory.plugin.AdManagerAppMainMenuInterface;
 public class AdManagerChartPluginMenu implements AdManagerAppMainMenuInterface {
 
     private final Properties properties = AdProperty.getProperties();
-    
-    MainSceneController mainSceneController;
-        
-    final String menuType = properties.getProperty("menuType");
     
     @Override
     public String getDisplayName() {
@@ -57,51 +55,12 @@ public class AdManagerChartPluginMenu implements AdManagerAppMainMenuInterface {
     }
        
     @Override
-    public Map<MainMenuCategory, List<MenuNode>> getSubMenuDisplayNames() {
-        Map<MainMenuCategory, List<MenuNode>> nodeMap = new HashMap<>();
-        List<MenuNode> resultNodes = new ArrayList<>();
-        
-        List<MenuNode> analysisChildren = new ArrayList<>();
-        analysisChildren.add(new MenuNode(LocaleUtils.getString("key.SubMenuTitle.TimeLine"), null)); 
-        analysisChildren.add(new MenuNode(LocaleUtils.getString("key.SubMenuTitle.KanbanTotalWorkTime"), null)); 
-        analysisChildren.add(new MenuNode(LocaleUtils.getString("key.SubMenuTitle.ProcessAverageWorkTime"), null)); 
-        analysisChildren.add(new MenuNode(LocaleUtils.getString("key.SubMenuTitle.WorkerAverageWorkTime"), null)); 
-        resultNodes.add(new MenuNode(LocaleUtils.getString("key.SubMenuTitle.AnalysisTitle"), analysisChildren)); 
-        nodeMap.put(MainMenuCategory.RESULT, resultNodes);
-
-        return nodeMap;
-    }
-    
-
-    @Override
-    public void onSelectMenuAction(String subMenuDisplayName) {
+    public void onSelectMenuAction() {
         SceneContiner sc = SceneContiner.getInstance();
         sc.trans("ChartMainScene");
-//        if (Objects.isNull(this.mainSceneController)) {
-//                Object controller = SceneContiner.getInstance().getSceneController();
-//                if (controller instanceof MainSceneController mainSceneController1) {
-//                    this.mainSceneController = mainSceneController1;
-//                } 
-//            }
         sc.visibleArea("MenuPane", false);
         sc.visibleArea("MenuPaneUnderlay", false);
-        
-        if (MenuTypeEnum.TREE.getValue().equals(menuType)) {
-            
-            Map<String, Object[]> componentMap = new HashMap<>();
-            componentMap.put(LocaleUtils.getString("key.SubMenuTitle.TimeLine"), new Object[]{"ChartTimeLineCompo", mainSceneController});
-            componentMap.put(LocaleUtils.getString("key.SubMenuTitle.KanbanTotalWorkTime"), new Object[]{"ChartKanbanSummaryCompo"});
-            componentMap.put(LocaleUtils.getString("key.SubMenuTitle.ProcessAverageWorkTime"), new Object[]{"ChartWorkSummaryCompo"});
-            componentMap.put(LocaleUtils.getString("key.SubMenuTitle.WorkerAverageWorkTime"), new Object[]{"ChartOrganizationSummaryCompo"});
-
-            Object[] info = componentMap.get(subMenuDisplayName);
-            if (info.length > 1 && info[1] != null) {
-                sc.setComponent("ContentNaviPane", info[0].toString(), info[1]);
-            } else {
-                sc.setComponent("ContentNaviPane", info[0].toString());
-            } 
-        }
-    }
+    } 
 
     @Override
     public LicenseOptionType getOptionType() {
@@ -130,14 +89,54 @@ public class AdManagerChartPluginMenu implements AdManagerAppMainMenuInterface {
     } 
     
     @Override
-    public void onSelectSubMenuAction(String subMenudisplayName) {
-        onSelectMenuAction(subMenudisplayName);
+    public Map<MainMenuCategoryEnum, List<MenuNode>> getTreeNodes() {
+        Map<MainMenuCategoryEnum, List<MenuNode>> nodes = new HashMap<>();
+        List<MenuNode> resultNodes = new ArrayList<>();
+        
+        TreeItem<String> chartNodes= new TreeItem<>(SubMenuCategoryEnum.ANALYSIS_TITLE.getDisplayName());
+        chartNodes.setExpanded(false);
+        
+        TreeItem<String> timeLineItem = new TreeItem<>(SubMenuCategoryEnum.TIME_LINE.getDisplayName());                                            //タイムライン
+        TreeItem<String> kanbanTotalWorkTimeItem = new TreeItem<>(SubMenuCategoryEnum.KANBAN_TOTAL_WORK_TIME.getDisplayName());                    //総作業時間
+        TreeItem<String> processAvgWorkTimeItem = new TreeItem<>(SubMenuCategoryEnum.PROCESS_AVERAGE_WORK_TIME.getDisplayName());                  //平均作業時間:工程
+        TreeItem<String> workerAvgWorkTimeItem = new TreeItem<>(SubMenuCategoryEnum.WORKER_AVERAGE_WORK_TIME.getDisplayName());                    //平均作業時間:作業者
+        
+        chartNodes.getChildren().addAll(Arrays.asList(timeLineItem,kanbanTotalWorkTimeItem,processAvgWorkTimeItem,workerAvgWorkTimeItem));
+        
+        // Map actions for child items
+        Map<TreeItem<String>, Runnable> childActions = new HashMap<>();
+        childActions.put(timeLineItem, createMenuAction("ChartTimeLineCompo",null));   
+        childActions.put(kanbanTotalWorkTimeItem, createMenuAction("ChartKanbanSummaryCompo", null));            
+        childActions.put(processAvgWorkTimeItem, createMenuAction("ChartWorkSummaryCompo", null));
+        childActions.put(workerAvgWorkTimeItem, createMenuAction("ChartOrganizationSummaryCompo", null));
+        
+        resultNodes.add(new MenuNode(chartNodes, null, childActions));
+        
+        nodes.put(MainMenuCategoryEnum.RESULT, resultNodes);
+        
+        return nodes;
     }
     
-     public List<TreeMenuNode> getMenuNodes() {
-        return Arrays.asList(new TreeMenuNode(MenuNode.leaf(SubMenuCategoryEnum.KANBAN.getDisplayName()), MainMenuCategory.OPERATION),
-                new TreeMenuNode(MenuNode.leaf(SubMenuCategoryEnum.LITE_KANBAN_TITLE.getDisplayName()), MainMenuCategory.LITE),
-                new TreeMenuNode(MenuNode.leaf("SETTINGS1"), MainMenuCategory.SETTINGS)
-        );
+        private Runnable createMenuAction(String contentComponent, Object argument) {
+        return () -> {
+            SceneContiner sc = SceneContiner.getInstance();
+            boolean hideSideNaviPane = MenuTypeEnum.from(AdProperty.getProperties().getProperty("menuType")).isTree();
+            
+            if (!sc.trans("ChartMainScene", hideSideNaviPane)) {
+                return;
+            }
+            
+            sc.visibleArea("MenuPane", false);
+            sc.visibleArea("MenuPaneUnderlay", false);
+            sc.setComponent("AppBarPane", "AppBarCompo");
+            
+            
+            if (argument != null) {
+                sc.setComponent("ContentNaviPane", contentComponent, mainScene);
+            } else {
+                sc.setComponent("ContentNaviPane", contentComponent);
+            }
+        };
     }
+ 
 }
