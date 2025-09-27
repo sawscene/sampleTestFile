@@ -23,7 +23,7 @@ import javafx.scene.layout.BorderPane;
  * @author s-heya
  */
 @FxScene(id = "ChartMainScene", fxmlPath = "/fxml/chartplugin/MainScene.fxml")
-public class MainSceneController implements Initializable {
+public class MainSceneController implements Initializable, ArgumentDelivery {
     
     private final SceneContiner sc = SceneContiner.getInstance();
 
@@ -60,14 +60,15 @@ public class MainSceneController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         sc.setComponent(MenuPane, "MainMenuCompo");
         sc.setComponent(AppBarPane, "AppBarCompo");
-                
-        String menuType = AdProperty.getProperties().getProperty("menuType");
-        if ("tree".equals(menuType)) {
-            SideNaviPane.setManaged(false);
-            SideNaviPane.setVisible(false);
-        } else {
-            sc.setComponent(SideNaviPane, "ChartNaviCompo", this);
-        }
+    }
+
+    @Override
+    public void setArgument(Object argument) {
+           if(Boolean.TRUE.equals(argument)) {
+               hideSideNaviPane();
+           } else {
+               sc.setComponent(SideNaviPane, "ChartNaviCompo", this);
+           }
     }
 
     /**
