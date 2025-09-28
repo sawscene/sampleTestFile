@@ -673,16 +673,6 @@ public class TimeLineCompoController implements Initializable, ComponentHandler,
     public void onFullScreen(ActionEvent event) {
         try {
             logger.info("onFullScreen start.");
-                       
-//            if (Objects.isNull(this.mainSceneController)) {
-//                Object controller = SceneContiner.getInstance().getSceneController();
-//                if (controller instanceof MainSceneController mainSceneController1) {
-//                    this.mainSceneController = mainSceneController1;
-//                } else {
-//                    logger.warn("MainSceneController is not available. Skip full-screen handling.");
-//                    return;
-//                }
-//            }
 
             //フルスクリーン切り替え時にボタンの表示とメニューの表示を切り替える
             sc.getStage().fullScreenProperty().addListener((observable, oldValue, newValue) -> {
